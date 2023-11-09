@@ -1,0 +1,12 @@
+version: '3.4'
+
+services:
+  bookingapp:
+    image: bookingapp
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    environment:
+      NODE_ENV: development
+    ports:
+      - 3004:3004

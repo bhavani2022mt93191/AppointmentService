@@ -23,10 +23,10 @@ router.get("/", async (req, res, next) => {
  console.log("appointments list api")
   try {
     const db = getDBConnection();
-    //`SELECT * FROM ${appointmentTable} WHERE ON_DATE = ? and ON_MONTH=? and ON_YEAR=? `,
-    // [getTodaysDate, getMonth+1, getYear]
+    
     await db.all(
-      `SELECT * FROM ${appointmentTable}`,
+      `SELECT * FROM ${appointmentTable} WHERE DATE = ? and MONTH=? and YEAR=? `,
+      [getTodaysDate, getMonth+1, getYear],
       
       (error, rows) => {
         console.log("error",error, rows)
@@ -61,8 +61,6 @@ router.get("/", async (req, res, next) => {
     console.log(error);
     send500ErrorResponse(res);
   }
-  // fetch all patients from DB
-  // make response & returns
 });
 
 router.get("/:appId", (req, res, next) => {
@@ -113,6 +111,7 @@ router.get("/:appId", (req, res, next) => {
   }
 });
 
+//returns all appointments booked by patient (Pid)
 router.get("/patient/:pid", (req, res, next) => {
   const patientId = req.params.pid;
   console.log(patientId);
@@ -124,9 +123,63 @@ router.get("/patient/:pid", (req, res, next) => {
     const db = getDBConnection();
     db.all(
       `SELECT * FROM ${appointmentTable} WHERE PID = ?`,
-      patientId,
+      [patientId],
       function (error, rows) {
         console.log("select patient info", error, rows);
+        if (error) {
+          console.log(error);
+          send500ErrorResponse(res);
+        } else {
+          console.log(rows);
+          const response = {
+            count: rows.length,
+            users: rows.map((row) => {
+              return {
+                id: row.id,
+                pid: row.PID,
+                did: row.DID,
+                on: row.DATE,
+                month: row.MONTH,
+                year: row.YEAR,
+                start: row.START,
+                END: row.END,
+                request: {
+                  type: "PUT",
+                  endpoint: "http://localhost:3000/appointment/" + row.id,
+                },
+              };
+            }),
+          };
+          res.status(200).json(response);
+        }
+      }
+    ).close;
+  } catch (error) {
+    console.log(error);
+    send500ErrorResponse(res);
+  }
+});
+
+//returns all doctor's appointments (DID)
+//when pastMonthsCnt = 0 => returns today's appointment
+// pastMonthsCnt>0 => returns appointments scheduled from past months to current month in this year
+router.get("/doctor/:did", (req, res, next) => {
+  const docId = req.params.did;
+  const pastMonths = req.query?.pastMonths || 0;
+  console.log(docId);
+  if (!docId) {
+    send400ErrorResponse(res);
+    return;
+  }
+  try {
+    const db = getDBConnection();
+    const querySt = pastMonths <= 0 ? 
+    `SELECT * FROM ${appointmentTable} WHERE DID =${docId} and DATE =${getTodaysDate} and MONTH=${getMonth+1} and YEAR=${getYear}` :
+    `SELECT * FROM ${appointmentTable} WHERE DID =${docId} and MONTH>${getMonth-pastMonths+1} and MONTH<=${getMonth+1} and YEAR=${getYear}`;
+    db.all(
+      querySt,
+      function (error, rows) {
+        console.log("select doctors info", pastMonths, error, rows);
         if (error) {
           console.log(error);
           send500ErrorResponse(res);
@@ -239,7 +292,7 @@ router.put("/", (req, res, next) => {
     }
 
     const db = getDBConnection();
-    //TODO: check for presense of pid & did
+    //TODO: check for presense of patient, doctor & their availability
     db.run(
       `UPDATE ${appointmentTable} SET PID=? , DID=? , DATE=? , MONTH=? , YEAR=? , START=? , EN=D=? ) WHERE ID=?`,
       [
