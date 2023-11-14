@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const { getDBConnection, appointmentTable } = require("../../AppDAO");
+require("dotenv").config();
+const API_GATEWAY = process.env.GATEWAY_SERVICE || "http://localhost:3001"
 
 const send500ErrorResponse = (res) => {
   res.status(500).json({
@@ -35,7 +37,7 @@ router.get("/", async (req, res, next) => {
         } else {
           const response = {
             count: rows.length,
-            users: rows.map((row) => {
+            appointments: rows.map((row) => {
               return {
                 id: row.id,
                 pid: row.PID,
@@ -47,7 +49,7 @@ router.get("/", async (req, res, next) => {
                 END: row.END,
                 request: {
                   type: "PUT",
-                  endpoint: "http://localhost:3000/appointment/" + row.id,
+                  endpoint: `${API_GATEWAY}/appointment/` + row.id,
                 },
               };
             }),
@@ -84,7 +86,7 @@ router.get("/:appId", (req, res, next) => {
           console.log(rows);
           const response = {
             count: rows.length,
-            users: rows.map((row) => {
+            appointments: rows.map((row) => {
               return {
                 id: row.id,
                 pid: row.PID,
@@ -96,7 +98,7 @@ router.get("/:appId", (req, res, next) => {
                 END: row.END,
                 request: {
                   type: "PUT",
-                  endpoint: "http://localhost:3000/appointment/" + row.id,
+                  endpoint: `${API_GATEWAY}/appointment/` + row.id,
                 },
               };
             }),
@@ -133,7 +135,7 @@ router.get("/patient/:pid", (req, res, next) => {
           console.log(rows);
           const response = {
             count: rows.length,
-            users: rows.map((row) => {
+            appointments: rows.map((row) => {
               return {
                 id: row.id,
                 pid: row.PID,
@@ -145,7 +147,7 @@ router.get("/patient/:pid", (req, res, next) => {
                 END: row.END,
                 request: {
                   type: "PUT",
-                  endpoint: "http://localhost:3000/appointment/" + row.id,
+                  endpoint: `${API_GATEWAY}/appointment/` + row.id,
                 },
               };
             }),
@@ -173,9 +175,9 @@ router.get("/doctor/:did", (req, res, next) => {
   }
   try {
     const db = getDBConnection();
-    const querySt = pastMonths <= 0 ? 
-    `SELECT * FROM ${appointmentTable} WHERE DID =${docId} and DATE =${getTodaysDate} and MONTH=${getMonth+1} and YEAR=${getYear}` :
-    `SELECT * FROM ${appointmentTable} WHERE DID =${docId} and MONTH>${getMonth-pastMonths+1} and MONTH<=${getMonth+1} and YEAR=${getYear}`;
+    const querySt = pastMonths && pastMonths > 0 ? 
+    `SELECT * FROM ${appointmentTable} WHERE DID =${docId} and MONTH>${getMonth-pastMonths+1} and MONTH<=${getMonth+1} and YEAR=${getYear}` : 
+    `SELECT * FROM ${appointmentTable} WHERE DID =${docId} and DATE =${getTodaysDate} and MONTH=${getMonth+1} and YEAR=${getYear}`;
     db.all(
       querySt,
       function (error, rows) {
@@ -187,7 +189,7 @@ router.get("/doctor/:did", (req, res, next) => {
           console.log(rows);
           const response = {
             count: rows.length,
-            users: rows.map((row) => {
+            appointments: rows.map((row) => {
               return {
                 id: row.id,
                 pid: row.PID,
@@ -199,7 +201,7 @@ router.get("/doctor/:did", (req, res, next) => {
                 END: row.END,
                 request: {
                   type: "PUT",
-                  endpoint: "http://localhost:3000/appointment/" + row.id,
+                  endpoint: `${API_GATEWAY}/appointment/` + row.id,
                 },
               };
             }),
@@ -254,12 +256,12 @@ router.post("/", (req, res) => {
         } else {
           res.status(201).json({
             message: "Created appointment successfully",
-            createdUser: {
+            createdAppointment: {
               ...appointmentDetails,
               id: this.lastID,
               request: {
                 type: "GET",
-                url: "http://localhost:3000/appointment/" + this.lastID,
+                url: `${API_GATEWAY}/appointment/` + this.lastID,
               },
             },
           });
@@ -294,7 +296,7 @@ router.put("/", (req, res, next) => {
     const db = getDBConnection();
     //TODO: check for presense of patient, doctor & their availability
     db.run(
-      `UPDATE ${appointmentTable} SET PID=? , DID=? , DATE=? , MONTH=? , YEAR=? , START=? , EN=D=? ) WHERE ID=?`,
+      `UPDATE ${appointmentTable} SET PID=? , DID=? , DATE=? , MONTH=? , YEAR=? , START=? , END=? ) WHERE ID=?`,
       [
         appointmentDetails.pid,
         appointmentDetails.did,
@@ -313,12 +315,52 @@ router.put("/", (req, res, next) => {
         } else {
           res.status(201).json({
             message: "updated appointment details successfully",
-            createdUser: {
+            updatedAppointment: {
               ...appointmentDetails,
               id: this.changes,
               request: {
                 type: "GET",
-                url: "http://localhost:3000/appointment/" + this.lastID,
+                url: `${API_GATEWAY}/appointment/` + this.lastID,
+              },
+            },
+          });
+        }
+      }
+    ).close;
+  } catch (error) {
+    console.log("error", error);
+    send500ErrorResponse(res);
+  }
+});
+
+//update appointment visit status
+router.patch("/:appId", (req, res) => {
+  try {
+    const appointmentId = req.params?.appId;
+    const isVisited = req.query?.isVisited || false;
+
+    const db = getDBConnection();
+    //TODO: check for presense of patient, doctor & their availability
+    db.run(
+      `UPDATE ${appointmentTable} SET ISVISITED = ? ) WHERE ID=?`,
+      [
+        isVisited,
+        appointmentId
+      ],
+      function (error) {
+        if (error) {
+          res.status(500).json({
+            message: "unable to update status",
+          });
+        } else {
+          res.status(201).json({
+            message: "updated appointment details successfully",
+            updatedAppointment: {
+              ...appointmentDetails,
+              id: this.changes,
+              request: {
+                type: "GET",
+                url: `${API_GATEWAY}/appointment/` + this.lastID,
               },
             },
           });

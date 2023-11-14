@@ -6,7 +6,7 @@ const appointmentTable = "APPOINTMENTS";
 const dbInit = () =>{
    const db = getDBConnection();
    // Creates appointment table
-   db.run(`CREATE TABLE IF NOT EXISTS ${appointmentTable} (id INTEGER PRIMARY KEY, PID INTEGER, DID INTEGER, DATE INTEGER, MONTH INTEGER, YEAR INTEGER, START TEXT, END TEXT)`);
+   db.run(`CREATE TABLE IF NOT EXISTS ${appointmentTable} (id INTEGER PRIMARY KEY, PID INTEGER, DID INTEGER, DATE INTEGER, MONTH INTEGER, YEAR INTEGER, START TEXT, END TEXT, ISVISITED INTEGER)`);
    db.close();
 }
 
